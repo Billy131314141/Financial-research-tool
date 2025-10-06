@@ -88,7 +88,20 @@ def fetch_transcript(ticker: str, year: int, quarter: int, api_key: str):
             'X-Api-Key': api_key
         }
         
+        # Debug info (only show key length for security)
+        with st.expander("🔍 Debug Information", expanded=False):
+            st.code(f"""
+API Endpoint: {url}
+Parameters: ticker={params['ticker']}, year={params['year']}, quarter={params['quarter']}
+API Key Length: {len(api_key) if api_key else 0} characters
+API Key Format: {'Valid' if api_key and len(api_key) > 10 else 'Invalid - too short'}
+Full URL: {url}?ticker={params['ticker']}&year={params['year']}&quarter={params['quarter']}
+            """)
+        
         response = requests.get(url, params=params, headers=headers, timeout=20)
+        
+        # Log response for debugging
+        st.caption(f"📡 Response Status: {response.status_code}")
         
         if response.status_code == 200:
             data = response.json()
@@ -99,14 +112,85 @@ def fetch_transcript(ticker: str, year: int, quarter: int, api_key: str):
             elif data and isinstance(data, list) and len(data) > 0:
                 return data[0]
             else:
+                st.warning("⚠️ API returned 200 but no data found")
+                st.json(data)
                 return None
+        elif response.status_code == 401:
+            st.error("❌ **Authentication Error (401): Invalid API Key**")
+            st.info("""
+            **How to fix:**
+            1. Check your API Ninjas dashboard: https://api-ninjas.com/profile
+            2. Verify your API key is active
+            3. For Hugging Face deployment, check Settings → Repository secrets
+            4. Ensure the key is named exactly: `API_NINJAS_KEY`
+            5. No quotes or extra spaces in the secret value
+            
+            **Current key status:**
+            - Key is present: {bool_status}
+            - Key length: {key_len} characters
+            """.format(
+                bool_status="✅ Yes" if api_key else "❌ No",
+                key_len=len(api_key) if api_key else 0
+            ))
+            with st.expander("Show full error response"):
+                st.code(response.text)
+            return None
+        elif response.status_code == 404:
+            st.error(f"❌ **Not Found (404): Transcript not available**")
+            st.info(f"""
+            The API returned 404 for {ticker} Q{quarter} {year}.
+            
+            This usually means:
+            - No earnings transcript exists for this combination
+            - Company hasn't reported earnings yet
+            - Try a different quarter or year
+            
+            **Suggestions:**
+            - Try major tech companies: MSFT, AAPL, GOOGL, TSLA
+            - Try recent quarters: Q1-Q4 2024, Q1-Q4 2023
+            - Some companies report on different schedules
+            """)
+            with st.expander("Show API response"):
+                st.code(response.text)
+            return None
+        elif response.status_code == 429:
+            st.error("❌ **Rate Limit Exceeded (429)**")
+            st.info("""
+            You've hit the API rate limit.
+            
+            **API Ninjas Free Tier:**
+            - 50,000 requests per month
+            - ~1,600 requests per day
+            
+            Wait a few minutes and try again.
+            """)
+            return None
         else:
-            st.error(f"❌ API Error: {response.status_code}")
+            st.error(f"❌ **API Error ({response.status_code})**")
             st.code(response.text)
+            with st.expander("Full error details"):
+                st.json({
+                    "status_code": response.status_code,
+                    "url": url,
+                    "params": params,
+                    "response": response.text
+                })
             return None
             
+    except requests.exceptions.Timeout:
+        st.error("❌ **Request Timeout**")
+        st.info("The API request took too long. Try again or check your internet connection.")
+        return None
+    except requests.exceptions.ConnectionError:
+        st.error("❌ **Connection Error**")
+        st.info("Could not connect to API Ninjas. Check your internet connection.")
+        return None
     except Exception as e:
-        st.error(f"❌ Request failed: {e}")
+        st.error(f"❌ **Unexpected Error:** {type(e).__name__}")
+        st.code(str(e))
+        with st.expander("Full error traceback"):
+            import traceback
+            st.code(traceback.format_exc())
         return None
 
 
