@@ -202,7 +202,12 @@ def show():
     """, unsafe_allow_html=True)
     
     # API Key setup
-    fmp_api_key = os.getenv('FMP_API_KEY', 'A6MKpF3MmM14y3KFEazkMiLiPgpiAdGe')
+    fmp_api_key = os.getenv('FMP_API_KEY')
+
+    if not fmp_api_key:
+        st.warning("⚠️ FMP_API_KEY not found in environment variables")
+        st.info("Add FMP_API_KEY to your .env file or Streamlit Secrets")
+        st.stop()
     
     # Input section
     st.markdown("### 🔍 Select Company")
