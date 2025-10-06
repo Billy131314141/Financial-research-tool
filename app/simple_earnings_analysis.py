@@ -1,6 +1,7 @@
 """
 Simple Earnings Transcript Analysis
-Uses FMP endpoint: /stable/earning-call-transcript
+Uses API Ninjas endpoint: /v1/earningstranscript
+Fixed: Uses session state to persist data across reruns
 """
 import streamlit as st
 import requests
@@ -265,6 +266,10 @@ def show():
     """Main page"""
     apply_style()
     
+    # Initialize session state for persisting data across reruns
+    if 'transcript_result' not in st.session_state:
+        st.session_state.transcript_result = None
+    
     # Header
     st.markdown(f"""
         <div style='background: linear-gradient(90deg, {COLORS['accent_orange']} 0%, {COLORS['accent_blue']} 100%); 
@@ -320,6 +325,7 @@ def show():
     
     st.markdown("---")
     
+    # When button is clicked, fetch and store data in session state
     if analyze_btn:
         with st.spinner(f'📡 Fetching {ticker} Q{quarter} {year} earnings transcript...'):
             transcript_data = fetch_transcript(ticker, year, quarter, api_key)
@@ -340,40 +346,58 @@ def show():
                 
                 **Example that works:** MSFT, Year: 2024, Quarter: 2
                 """)
-                return
-            
-            # Extract data (API Ninjas format)
-            # Try different field names for transcript content
-            content = (transcript_data.get('transcript') or 
-                      transcript_data.get('content') or 
-                      transcript_data.get('text') or '')
-            
-            symbol = transcript_data.get('ticker', transcript_data.get('symbol', ticker))
-            qtr = transcript_data.get('quarter', quarter)
-            yr = transcript_data.get('year', year)
-            date = transcript_data.get('date', f'Q{qtr} {yr}')
-            
-            if not content:
-                st.error("❌ Transcript returned but has no content")
-                st.json(transcript_data)
-                return
-            
-            # Success!
-            st.success(f"✅ Successfully fetched {symbol} Q{qtr} {yr} earnings transcript!")
-            
-            # Show metadata
-            st.markdown(f"""
-                <div class="sentiment-card">
-                    <h3 style='margin: 0;'>{symbol} - Q{qtr} {yr} Earnings Call</h3>
-                    <p style='margin: 5px 0; color: {COLORS['text_secondary']};'>
-                        Date: {date} | Length: {len(content):,} characters | Words: ~{len(content.split()):,}
-                    </p>
-                </div>
-            """, unsafe_allow_html=True)
-            
-            st.markdown("---")
-            
-            # Sentiment Analysis
+                st.session_state.transcript_result = None
+            else:
+                # Extract data (API Ninjas format)
+                content = (transcript_data.get('transcript') or 
+                          transcript_data.get('content') or 
+                          transcript_data.get('text') or '')
+                
+                if not content:
+                    st.error("❌ Transcript returned but has no content")
+                    st.json(transcript_data)
+                    st.session_state.transcript_result = None
+                else:
+                    symbol = transcript_data.get('ticker', transcript_data.get('symbol', ticker))
+                    qtr = transcript_data.get('quarter', quarter)
+                    yr = transcript_data.get('year', year)
+                    date = transcript_data.get('date', f'Q{qtr} {yr}')
+                    
+                    # Success! Store in session state (persists across reruns)
+                    st.success(f"✅ Successfully fetched {symbol} Q{qtr} {yr} earnings transcript!")
+                    
+                    st.session_state.transcript_result = {
+                        'content': content,
+                        'symbol': symbol,
+                        'qtr': qtr,
+                        'yr': yr,
+                        'date': date,
+                        'sentiment': None  # Will be computed below
+                    }
+    
+    # Display data if it exists in session state (regardless of button state!)
+    if st.session_state.transcript_result:
+        data = st.session_state.transcript_result
+        content = data['content']
+        symbol = data['symbol']
+        qtr = data['qtr']
+        yr = data['yr']
+        date = data['date']
+        
+        # Show metadata
+        st.markdown(f"""
+            <div class="sentiment-card">
+                <h3 style='margin: 0;'>{symbol} - Q{qtr} {yr} Earnings Call</h3>
+                <p style='margin: 5px 0; color: {COLORS['text_secondary']};'>
+                    Date: {date} | Length: {len(content):,} characters | Words: ~{len(content.split()):,}
+                </p>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("---")
+        
+        # Sentiment Analysis (compute once and cache in session state)
+        if data['sentiment'] is None:
             st.markdown("### 🤖 AI Sentiment Analysis")
             
             with st.spinner('🧠 Analyzing with FinBERT...'):
@@ -386,54 +410,61 @@ def show():
                 
                 st.info(f"📊 Analyzing {len(chunks)} segments...")
                 
-                # Analyze
+                # Analyze and store in session state
                 aggregate_sentiment = analyzer.get_aggregate_sentiment(chunks)
-                
-                # Display
-                display_sentiment(aggregate_sentiment)
+                st.session_state.transcript_result['sentiment'] = aggregate_sentiment
+        else:
+            # Use cached sentiment from session state
+            st.markdown("### 🤖 AI Sentiment Analysis")
+            aggregate_sentiment = data['sentiment']
+        
+        # Display sentiment
+        display_sentiment(aggregate_sentiment)
+        
+        st.markdown("---")
+        
+        # Full transcript
+        st.markdown("### 📄 Complete Transcript")
+        st.markdown(f"""
+            <div class="transcript-box">
+                {content.replace(chr(10), '<br>')}
+            </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("---")
+        
+        # Detailed segments
+        with st.expander("🔍 Detailed Segment Analysis", expanded=False):
+            detailed = aggregate_sentiment.get('detailed_results', [])
             
-            st.markdown("---")
-            
-            # Full transcript
-            st.markdown("### 📄 Complete Transcript")
-            st.markdown(f"""
-                <div class="transcript-box">
-                    {content.replace(chr(10), '<br>')}
-                </div>
-            """, unsafe_allow_html=True)
-            
-            st.markdown("---")
-            
-            # Detailed segments
-            with st.expander("🔍 Detailed Segment Analysis", expanded=False):
-                detailed = aggregate_sentiment.get('detailed_results', [])
-                
-                if detailed:
-                    for i, result in enumerate(detailed[:20], 1):
-                        sentiment = result.get('sentiment', 'neutral')
-                        confidence = result.get('confidence', 0.0)
-                        text = result.get('text', '')[:200]
-                        
-                        if sentiment == 'positive':
-                            emoji = '📈'
-                            color = COLORS['positive']
-                        elif sentiment == 'negative':
-                            emoji = '📉'
-                            color = COLORS['negative']
-                        else:
-                            emoji = '➡️'
-                            color = COLORS['neutral']
-                        
-                        st.markdown(f"""
-                            <div style='background: {COLORS['bg_light']}; padding: 15px; margin: 10px 0; 
-                                        border-radius: 6px; border-left: 3px solid {color};'>
-                                <strong>Segment {i}:</strong> {emoji} {sentiment.upper()} ({confidence:.1%})<br>
-                                <em style='color: {COLORS['text_secondary']};'>{text}...</em>
-                            </div>
-                        """, unsafe_allow_html=True)
+            if detailed:
+                for i, result in enumerate(detailed[:20], 1):
+                    sentiment = result.get('sentiment', 'neutral')
+                    confidence = result.get('confidence', 0.0)
+                    text = result.get('text', '')[:200]
+                    
+                    if sentiment == 'positive':
+                        emoji = '📈'
+                        color = COLORS['positive']
+                    elif sentiment == 'negative':
+                        emoji = '📉'
+                        color = COLORS['negative']
+                    else:
+                        emoji = '➡️'
+                        color = COLORS['neutral']
+                    
+                    st.markdown(f"""
+                        <div style='background-color: {COLORS['bg_light']}; padding: 15px; margin: 10px 0; 
+                                    border-radius: 6px; border-left: 3px solid {color};'>
+                            <strong>Segment {i}:</strong> {emoji} {sentiment.upper()} ({confidence:.1%} confidence)<br>
+                            <em style='color: {COLORS['text_secondary']};'>{text}...</em>
+                        </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.info("No detailed analysis available.")
     
     else:
-        # Instructions
+        # Show instructions when no data is loaded
         st.markdown("""
         ### 📋 How to Use
         
@@ -477,4 +508,3 @@ def show():
 
 if __name__ == "__main__":
     show()
-
