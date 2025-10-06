@@ -69,3 +69,6 @@ Thumbs.db
 htmlcov/
 
 
+
+# Backup directories
+old-version-backup/
