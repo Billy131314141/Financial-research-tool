@@ -10,7 +10,7 @@ import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from config.settings import APP_TITLE, APP_ICON, PAGE_LAYOUT
-from app import market_overview_polygon, dashboard_polygon, data_export_polygon, bloomberg_dashboard, sentiment_analysis, news_test_page, simple_earnings_analysis
+from app import market_overview_polygon, dashboard_polygon, data_export_polygon, news_test_page, simple_earnings_analysis
 
 # Page configuration
 st.set_page_config(
@@ -28,7 +28,7 @@ st.sidebar.markdown("""
                    font-size: 1.5rem;'>
             ⚡ FINANCIAL TERMINAL
         </h1>
-        <p style='font-size: 0.7rem; color: #8B949E; margin: 5px 0;'>Professional Edition v3.3</p>
+        <p style='font-size: 0.7rem; color: #8B949E; margin: 5px 0;'>Professional Edition v4.0</p>
     </div>
 """, unsafe_allow_html=True)
 
@@ -37,9 +37,7 @@ st.sidebar.markdown("---")
 page = st.sidebar.radio(
     "NAVIGATION",
     [
-        "⚡ Bloomberg Terminal",
         "📊 Earnings Transcript Analysis",
-        "🤖 AI Sentiment Analysis",
         "📰 News API Test",
         "🏠 Market Overview",
         "📈 Stock Dashboard",
@@ -61,35 +59,30 @@ st.sidebar.markdown("---")
 st.sidebar.markdown("### 📊 FEATURES")
 st.sidebar.success(
     """
-    **✨ NEW: Earnings Transcript Analysis!**
+    **✨ Earnings Transcript Analysis**
     
     - View complete earnings transcripts
     - AI sentiment analysis with FinBERT
     - Segment-by-segment breakdown
-    - Real-time FMP integration
+    - Real-time API Ninjas integration
     
     **Other Features:**
-    - News API testing
-    - AI Sentiment Analysis
-    - Bloomberg-style Terminal
+    - News API testing & validation
     - Professional visualizations
     - Real-time stock data
+    - Data export capabilities
     
-    **Powered by:** FMP, Polygon.io, newsdata.io, FinBERT
+    **Powered by:** API Ninjas, Polygon.io, newsdata.io, FinBERT
     """
 )
 
 st.sidebar.markdown("---")
-st.sidebar.caption("**Version 4.0** • Earnings Analysis Edition")
+st.sidebar.caption("**Version 4.0** • Streamlined Edition")
 st.sidebar.caption("© 2025 Financial Research Tool")
 
 # Main content area - route to appropriate page
-if page == "⚡ Bloomberg Terminal":
-    bloomberg_dashboard.show()
-elif page == "📊 Earnings Transcript Analysis":
+if page == "📊 Earnings Transcript Analysis":
     simple_earnings_analysis.show()
-elif page == "🤖 AI Sentiment Analysis":
-    sentiment_analysis.show()
 elif page == "📰 News API Test":
     news_test_page.show()
 elif page == "🏠 Market Overview":

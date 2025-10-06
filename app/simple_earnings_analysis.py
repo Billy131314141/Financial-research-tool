@@ -1,7 +1,7 @@
 """
 Simple Earnings Transcript Analysis
 Uses API Ninjas endpoint: /v1/earningstranscript
-Fixed: Uses session state to persist data across reruns
+Fixed: Uses session state with query tracking to prevent stale data
 """
 import streamlit as st
 import requests
@@ -269,6 +269,8 @@ def show():
     # Initialize session state for persisting data across reruns
     if 'transcript_result' not in st.session_state:
         st.session_state.transcript_result = None
+    if 'transcript_query' not in st.session_state:
+        st.session_state.transcript_query = None
     
     # Header
     st.markdown(f"""
@@ -297,7 +299,8 @@ def show():
         ticker = st.text_input(
             "Stock Ticker",
             value="MSFT",
-            help="Enter stock symbol (e.g., MSFT, AAPL, GOOGL)"
+            help="Enter stock symbol (e.g., MSFT, AAPL, GOOGL)",
+            key="ticker_input"
         ).upper()
     
     with col2:
@@ -306,15 +309,27 @@ def show():
             min_value=2015,
             max_value=2025,
             value=2024,
-            step=1
+            step=1,
+            key="year_input"
         )
     
     with col3:
         quarter = st.selectbox(
             "Quarter",
             options=[1, 2, 3, 4],
-            index=1  # Q2 (index 1 = value 2)
+            index=1,  # Q2 (index 1 = value 2)
+            key="quarter_input"
         )
+    
+    # Create unique query identifier for current inputs
+    current_query = f"{ticker}_{year}_{quarter}"
+    
+    # Check if inputs changed - if so, clear old data
+    if st.session_state.transcript_query != current_query:
+        if st.session_state.transcript_result is not None:
+            # Clear old data when inputs change
+            st.session_state.transcript_result = None
+            st.info("💡 Inputs changed. Click ANALYZE to fetch new data.")
     
     with col4:
         st.markdown("<br>", unsafe_allow_html=True)
@@ -347,6 +362,7 @@ def show():
                 **Example that works:** MSFT, Year: 2024, Quarter: 2
                 """)
                 st.session_state.transcript_result = None
+                st.session_state.transcript_query = None
             else:
                 # Extract data (API Ninjas format)
                 content = (transcript_data.get('transcript') or 
@@ -357,13 +373,14 @@ def show():
                     st.error("❌ Transcript returned but has no content")
                     st.json(transcript_data)
                     st.session_state.transcript_result = None
+                    st.session_state.transcript_query = None
                 else:
                     symbol = transcript_data.get('ticker', transcript_data.get('symbol', ticker))
                     qtr = transcript_data.get('quarter', quarter)
                     yr = transcript_data.get('year', year)
                     date = transcript_data.get('date', f'Q{qtr} {yr}')
                     
-                    # Success! Store in session state (persists across reruns)
+                    # Success! Store in session state with query tracking
                     st.success(f"✅ Successfully fetched {symbol} Q{qtr} {yr} earnings transcript!")
                     
                     st.session_state.transcript_result = {
@@ -374,9 +391,11 @@ def show():
                         'date': date,
                         'sentiment': None  # Will be computed below
                     }
+                    # Track what query this data is for
+                    st.session_state.transcript_query = current_query
     
-    # Display data if it exists in session state (regardless of button state!)
-    if st.session_state.transcript_result:
+    # Display data if it exists AND matches current inputs
+    if st.session_state.transcript_result and st.session_state.transcript_query == current_query:
         data = st.session_state.transcript_result
         content = data['content']
         symbol = data['symbol']
